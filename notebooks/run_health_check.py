@@ -104,6 +104,7 @@ print(f"Source path: {SRC_PATH}")
 
 # COMMAND ----------
 
+# %restart_python
 import requests  # noqa: F401
 import yaml  # noqa: F401
 
@@ -236,8 +237,14 @@ for c in scorecard.categories:
 timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
 safe_workspace_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in workspace_name)
 base_filename = f"{safe_workspace_name}_{environment}_{timestamp}"
-
+# current_dir = os.getcwd()
+user_email = spark.sql("SELECT session_user()").collect()[0][0]
+current_dir = f"/Workspace/Users/{user_email}"
+print(current_dir)
+output_path = current_dir + '/' + output_path
+print(output_path)
 os.makedirs(output_path, exist_ok=True)
+# dbutils.fs.mkdirs('/Workspace/Users/kevin.sequeira@datasagacity.com.au/' + output_path)
 html_out_path = os.path.join(output_path, f"{base_filename}.html")
 json_out_path = os.path.join(output_path, f"{base_filename}.json")
 

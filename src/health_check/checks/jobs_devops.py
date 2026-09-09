@@ -1,12 +1,16 @@
 """
-Jobs, workflows & Azure DevOps integration checks.
+Jobs, workflows & git platform integration checks.
+
+Accepts both Azure DevOps and GitHub as approved git providers throughout
+(the client may run either, or both, across their four workspaces) -- see
+`thresholds.repos.expected_git_providers` in the config.
 
   JOB-001  Retry & timeout hygiene per job/task
   JOB-002  Failure notifications configured
-  JOB-003  Jobs deployed from git (Azure DevOps) vs. ad-hoc notebook paths
+  JOB-003  Jobs deployed from git (Azure DevOps / GitHub) vs. ad-hoc notebook paths
   JOB-004  Jobs run as a service principal (not an individual user) in prod-like envs
   JOB-005  Job run failure rate over the lookback window
-  JOB-006  Databricks Repos -> Azure DevOps linkage & ref pinning
+  JOB-006  Databricks Repos -> git provider linkage & ref pinning
 """
 from __future__ import annotations
 
@@ -118,9 +122,9 @@ def _job003_git_source(client: DatabricksClient, cfg: dict, limits: dict, is_pro
                     f"notebook paths rather than a git_source: {', '.join(without_git[:10])}"
                 ),
                 recommendation=(
-                    "Deploy production jobs from the Azure DevOps repo via a Databricks Asset Bundle "
-                    "(or job git_source pointing at a tagged commit) so job definitions are versioned, "
-                    "reviewed via PR, and reproducible from source control."
+                    "Deploy production jobs from your Azure DevOps or GitHub repo via a Databricks Asset "
+                    "Bundle (or job git_source pointing at a tagged commit/release) so job definitions are "
+                    "versioned, reviewed via PR, and reproducible from source control."
                 ),
                 evidence={"jobs_without_git_source": without_git},
             )
@@ -235,9 +239,35 @@ def _job005_failure_rate(client: DatabricksClient, cfg: dict, limits: dict) -> l
     ]
 
 
+# Maps a Databricks Repos `provider` value to a friendly name for messages.
+# Extend this alongside `expected_git_providers` in the config if the client
+# adds another platform (e.g. GitLab, Bitbucket).
+_PROVIDER_LABELS = {
+    "azureDevOpsServices": "Azure DevOps",
+    "gitHub": "GitHub",
+    "gitHubEnterprise": "GitHub Enterprise",
+    "gitLab": "GitLab",
+    "gitLabEnterpriseEdition": "GitLab Enterprise",
+    "bitbucketCloud": "Bitbucket Cloud",
+    "bitbucketServer": "Bitbucket Server",
+    "awsCodeCommit": "AWS CodeCommit",
+}
+
+
+def _provider_label(provider: str) -> str:
+    return _PROVIDER_LABELS.get(provider, provider or "unknown")
+
+
 def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
-    expected_provider = cfg.get("thresholds", {}).get("repos", {}).get("expected_git_provider", "azureDevOpsServices")
-    require_pinned = cfg.get("thresholds", {}).get("repos", {}).get("require_pinned_ref_in_prod", True)
+    repos_cfg = cfg.get("thresholds", {}).get("repos", {})
+    expected_providers = repos_cfg.get("expected_git_providers")
+    if not expected_providers:
+        # Back-compat with an older single-provider config key.
+        single = repos_cfg.get("expected_git_provider")
+        expected_providers = [single] if single else ["azureDevOpsServices", "gitHub"]
+    require_pinned = repos_cfg.get("require_pinned_ref_in_prod", True)
+
+    expected_labels = ", ".join(_provider_label(p) for p in expected_providers)
 
     repos = list(client.get_pages("/api/2.0/repos", {}, items_key="repos"))
     if not repos:
@@ -245,15 +275,15 @@ def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: boo
             Finding(
                 category=CATEGORY_LABEL,
                 check_id="JOB-006",
-                title="Databricks Repos <-> Azure DevOps linkage",
+                title="Databricks Repos <-> git provider linkage",
                 status=Status.WARN,
                 severity=Severity.MEDIUM,
                 detail="No Databricks Repos are checked out in this workspace.",
-                recommendation="Use Databricks Repos (synced from Azure DevOps) for all deployed code rather than notebooks edited directly in the workspace.",
+                recommendation=f"Use Databricks Repos (synced from {expected_labels}) for all deployed code rather than notebooks edited directly in the workspace.",
             )
         ]
 
-    wrong_provider = [r for r in repos if r.get("provider") != expected_provider]
+    wrong_provider = [r for r in repos if r.get("provider") not in expected_providers]
     unpinned_prod = [r for r in repos if r.get("branch") and not r.get("tag")] if is_prod_like and require_pinned else []
 
     findings = []
@@ -265,8 +295,8 @@ def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: boo
                 title="Repo provider mismatch",
                 status=Status.INFO,
                 severity=Severity.LOW,
-                detail=f"{len(wrong_provider)} repo(s) use a provider other than {expected_provider}: " + ", ".join(f"{r.get('path')} ({r.get('provider')})" for r in wrong_provider[:10]),
-                recommendation="Confirm this is intentional if the client uses multiple git platforms.",
+                detail=f"{len(wrong_provider)} repo(s) use a provider other than the approved {expected_labels}: " + ", ".join(f"{r.get('path')} ({_provider_label(r.get('provider'))})" for r in wrong_provider[:10]),
+                recommendation="Confirm this is intentional if the client uses an additional git platform beyond the approved list.",
             )
         )
     if unpinned_prod:
@@ -286,9 +316,9 @@ def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: boo
             Finding(
                 category=CATEGORY_LABEL,
                 check_id="JOB-006",
-                title="Databricks Repos <-> Azure DevOps linkage",
+                title="Databricks Repos <-> git provider linkage",
                 status=Status.PASS,
-                detail=f"{len(repos)} repo(s) checked out, all via {expected_provider}" + (", pinned appropriately for this environment." if is_prod_like else "."),
+                detail=f"{len(repos)} repo(s) checked out, all via an approved provider ({expected_labels})" + (", pinned appropriately for this environment." if is_prod_like else "."),
             )
         )
     return findings
@@ -302,5 +332,5 @@ def run(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
     findings += run_check(lambda: _job003_git_source(client, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-003", title="CI/CD deployment (git_source)")
     findings += run_check(lambda: _job004_run_as(client, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity")
     findings += run_check(lambda: _job005_failure_rate(client, cfg, limits), category=CATEGORY_LABEL, check_id="JOB-005", title="Job run failure rate")
-    findings += run_check(lambda: _job006_repos_linkage(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-006", title="Databricks Repos <-> Azure DevOps linkage")
+    findings += run_check(lambda: _job006_repos_linkage(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-006", title="Databricks Repos <-> git provider linkage")
     return findings

@@ -92,7 +92,15 @@ thresholds:
     require_git_source_in_prod: true
     require_service_principal_run_as_in_prod: true
   repos:
-    expected_git_provider: "azureDevOpsServices"
+    # Databricks Repos `provider` values considered approved. JOB-006 flags
+    # any checked-out repo whose provider isn't in this list. Add/remove
+    # entries here if the client's approved git platforms change -- valid
+    # Databricks provider values include: azureDevOpsServices, gitHub,
+    # gitHubEnterprise, gitLab, gitLabEnterpriseEdition, bitbucketCloud,
+    # bitbucketServer, awsCodeCommit.
+    expected_git_providers:
+      - "azureDevOpsServices"
+      - "gitHub"
     require_pinned_ref_in_prod: true   # PROD Repos should track a tag/commit, not a mutable branch
 
 # API calls that can be expensive on a large workspace (Delta health scans,
