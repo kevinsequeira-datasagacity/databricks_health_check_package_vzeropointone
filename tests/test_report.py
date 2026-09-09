@@ -3,9 +3,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from health_check.utils import Finding, Status, Severity
-from health_check.scoring import build_scorecard
-from health_check.report import render_html_report
+from health_check_sdk.utils import Finding, Status, Severity
+from health_check_sdk.scoring import build_scorecard
+from health_check_sdk.report import render_html_report
 
 
 def _demo_scorecard():
@@ -18,21 +18,21 @@ def _demo_scorecard():
                 Finding(category="Security & IAM", check_id="SEC-003", title="Personal access token hygiene", status=Status.FAIL, severity=Severity.HIGH, detail="tokens never expire", recommendation="rotate them"),
             ],
         },
-        "compute_cost": {
-            "label": "Compute & Cost Hygiene",
+        "compute": {
+            "label": "Compute",
             "weight": 0.25,
             "findings": [
-                Finding(category="Compute & Cost Hygiene", check_id="COST-001", title="Autotermination", status=Status.WARN, severity=Severity.MEDIUM, detail="some clusters idle forever", recommendation="set autotermination"),
+                Finding(category="Compute", check_id="CMP-001", title="Autotermination", status=Status.WARN, severity=Severity.MEDIUM, detail="some clusters idle forever", recommendation="set autotermination"),
             ],
         },
-        "data_governance": {"label": "Data Governance", "weight": 0.25, "findings": []},
-        "jobs_devops": {"label": "Jobs, Workflows & DevOps", "weight": 0.2, "findings": []},
+        "unity_catalog": {"label": "Unity Catalog", "weight": 0.25, "findings": []},
+        "jobs_cicd": {"label": "Jobs & CI/CD", "weight": 0.2, "findings": []},
     }
     return build_scorecard(
         workspace_name="Acme-PROD",
         environment="prod",
         findings_by_category=findings_by_category,
-        generated_at="2026-09-07 00:00 UTC",
+        generated_at="2026-09-09 00:00 UTC",
     )
 
 
@@ -45,8 +45,6 @@ def test_report_renders_without_error_and_contains_key_content():
     assert "SEC-003" in html
     assert "rotate them" in html
     assert f"{scorecard.overall_score:.0f}" in html
-    # never render raw braces from an f-string mistake
-    assert "{" not in html.split("<style>")[1].split("</style>")[0] or True  # CSS legitimately has braces; real check below
 
 
 def test_report_escapes_html_in_findings():

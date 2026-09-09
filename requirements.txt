@@ -1,7 +1,8 @@
-# Runtime dependencies -- both ship with every standard Databricks Runtime,
-# listed here only so `pip install -r requirements.txt` works for local dev/CI.
+# Runtime dependencies. databricks-sdk ships pre-installed on most current
+# Databricks Runtimes and pyyaml on all of them; listed here so
+# `pip install -r requirements.txt` works for local dev/CI too.
+databricks-sdk>=0.30.0
 pyyaml>=6.0
-requests>=2.28
 
 # Dev / CI only
 pytest>=7.4

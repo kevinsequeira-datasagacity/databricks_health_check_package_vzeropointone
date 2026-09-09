@@ -1,7 +1,8 @@
 """
 Shared primitives used by every check module: the Finding record, status /
-severity enums, and small defensive helpers so that one flaky API call never
-takes down the whole health check run.
+severity enums, a `to_dict()` normalizer for databricks-sdk dataclasses, and
+small defensive helpers so that one flaky API call never takes down the
+whole health check run.
 """
 from __future__ import annotations
 
@@ -11,7 +12,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Optional
 
-logger = logging.getLogger("health_check")
+try:
+    from databricks.sdk.errors import DatabricksError, PermissionDenied
+except ImportError:  # SDK not installed in this environment (e.g. local dev/CI/tests)
+    DatabricksError = Exception
+    PermissionDenied = PermissionError
+
+logger = logging.getLogger("health_check_sdk")
 
 
 class Status(str, Enum):
@@ -33,8 +40,6 @@ class Severity(str, Enum):
     INFO = "INFO"
 
 
-# Severity is only meaningful for WARN/FAIL; PASS/INFO/N/A/ERROR findings are
-# still recorded (for the evidence trail) but don't cost any points.
 _SCORABLE_STATUSES = {Status.PASS, Status.WARN, Status.FAIL}
 
 _SEVERITY_PENALTY = {
@@ -73,7 +78,7 @@ class Finding:
         return base if self.status == Status.FAIL else base * 0.5
 
     def to_dict(self) -> dict:
-        d = {
+        return {
             "category": self.category,
             "check_id": self.check_id,
             "title": self.title,
@@ -84,7 +89,6 @@ class Finding:
             "resource": self.resource,
             "evidence": self.evidence,
         }
-        return d
 
 
 def utcnow() -> _dt.datetime:
@@ -118,6 +122,37 @@ def safe_get(d: Optional[dict], *path, default=None):
     return cur
 
 
+def to_dict(obj: Any) -> dict:
+    """
+    Normalize a databricks-sdk return value (a typed dataclass such as
+    ClusterDetails, Group, BaseJob, ...) to a plain dict, so every check
+    module can work with the same dict.get()-based logic regardless of
+    which SDK service/dataclass produced the value.
+
+    SDK dataclasses expose `.as_dict()` (it serializes to the same JSON
+    shape as the underlying REST API, snake_case field names, enums
+    reduced to their string value) -- that's the primary path. Falls back
+    to a shallow `vars()` dump, and passes plain dicts through unchanged,
+    so this is safe to call defensively even on values that aren't SDK
+    dataclasses (e.g. in unit tests using plain dicts/mocks).
+    """
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    as_dict = getattr(obj, "as_dict", None)
+    if callable(as_dict):
+        try:
+            result = as_dict()
+            if isinstance(result, dict):
+                return result
+        except Exception:
+            logger.debug("as_dict() failed for %r, falling back to vars()", type(obj), exc_info=True)
+    if hasattr(obj, "__dict__"):
+        return dict(vars(obj))
+    return {}
+
+
 def run_check(
     fn: Callable[[], list],
     *,
@@ -133,7 +168,7 @@ def run_check(
     try:
         result = fn()
         return result or []
-    except PermissionError as exc:
+    except (PermissionError, PermissionDenied) as exc:
         logger.warning("Permission denied for %s (%s): %s", check_id, title, exc)
         return [
             Finding(

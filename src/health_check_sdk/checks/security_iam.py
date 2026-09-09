@@ -1,8 +1,7 @@
 """
-Security & IAM checks.
+Security & IAM checks, built on databricks-sdk's WorkspaceClient.
 
-Assumes Entra ID -> SCIM group sync into the workspace (per the client's
-stated setup) and evaluates:
+Assumes Entra ID -> SCIM group sync into the workspace and evaluates:
 
   SEC-001  Entra/SCIM group sync is actually populating workspace groups
   SEC-002  Workspace admin rights are granted via group, not individual users
@@ -11,19 +10,28 @@ stated setup) and evaluates:
   SEC-005  IP access lists (expected in production-like environments)
   SEC-006  Cluster policy enforcement exists
   SEC-007  Org-wide max token lifetime policy is set
+
+Every SDK call is immediately normalized with `utils.to_dict()` so the check
+logic below works off plain dicts with the same field names as the REST
+API's JSON (which is what `.as_dict()` serializes back to) -- this keeps the
+logic identical in spirit to the REST-based sibling package while still
+going through the official, typed WorkspaceClient for every call.
 """
 from __future__ import annotations
 
-from ..api_client import DatabricksClient
-from ..utils import Finding, Severity, Status, parse_epoch_ms, safe_get, run_check
+from typing import TYPE_CHECKING
+
+from ..utils import DatabricksError, Finding, PermissionDenied, Severity, Status, parse_epoch_ms, run_check, safe_get, to_dict
+
+if TYPE_CHECKING:
+    from databricks.sdk import WorkspaceClient
 
 CATEGORY = "security_iam"
 CATEGORY_LABEL = "Security & IAM"
 
 
-def _sec001_scim_group_sync(client: DatabricksClient, cfg: dict) -> list:
-    groups = client.get("/api/2.0/preview/scim/v2/Groups", params={"count": 200})
-    resources = groups.get("Resources", []) or []
+def _sec001_scim_group_sync(w: "WorkspaceClient", cfg: dict) -> list:
+    resources = [to_dict(g) for g in w.groups.list()]
     if not resources:
         return [
             Finding(
@@ -40,8 +48,8 @@ def _sec001_scim_group_sync(client: DatabricksClient, cfg: dict) -> list:
             )
         ]
 
-    synced = [g for g in resources if g.get("externalId")]
-    local_only = [g for g in resources if not g.get("externalId") and g.get("displayName") not in ("admins", "users")]
+    synced = [g for g in resources if g.get("external_id")]
+    local_only = [g for g in resources if not g.get("external_id") and g.get("display_name") not in ("admins", "users")]
 
     findings = []
     if not synced:
@@ -54,7 +62,7 @@ def _sec001_scim_group_sync(client: DatabricksClient, cfg: dict) -> list:
                 severity=Severity.HIGH,
                 detail=(
                     f"Found {len(resources)} group(s) in the workspace, but none carry an "
-                    "externalId, which is how SCIM-provisioned groups are normally tagged. "
+                    "external_id, which is how SCIM-provisioned groups are normally tagged. "
                     "Group membership may be managed manually instead of synced from Entra ID."
                 ),
                 recommendation=(
@@ -71,7 +79,7 @@ def _sec001_scim_group_sync(client: DatabricksClient, cfg: dict) -> list:
                 check_id="SEC-001",
                 title="Entra ID / SCIM group sync",
                 status=Status.PASS,
-                detail=f"{len(synced)} of {len(resources)} group(s) are SCIM-provisioned (carry an externalId).",
+                detail=f"{len(synced)} of {len(resources)} group(s) are SCIM-provisioned (carry an external_id).",
                 evidence={"synced_groups": len(synced), "total_groups": len(resources)},
             )
         )
@@ -86,40 +94,41 @@ def _sec001_scim_group_sync(client: DatabricksClient, cfg: dict) -> list:
                 severity=Severity.LOW,
                 detail=(
                     f"{len(local_only)} group(s) appear to be workspace-local rather than "
-                    "synced from Entra ID: " + ", ".join(g.get("displayName", "?") for g in local_only[:10])
+                    "synced from Entra ID: " + ", ".join(g.get("display_name", "?") for g in local_only[:10])
                     + ("..." if len(local_only) > 10 else "")
                 ),
                 recommendation=(
                     "If these are intentional (e.g. break-glass groups), document them; "
                     "otherwise migrate their membership into Entra ID for a single source of truth."
                 ),
-                evidence={"groups": [g.get("displayName") for g in local_only]},
+                evidence={"groups": [g.get("display_name") for g in local_only]},
             )
         )
     return findings
 
 
-def _sec002_admin_membership(client: DatabricksClient, cfg: dict) -> list:
-    groups = client.get("/api/2.0/preview/scim/v2/Groups", params={"filter": 'displayName eq "admins"'})
-    resources = groups.get("Resources", []) or []
-    if not resources:
+def _sec002_admin_membership(w: "WorkspaceClient", cfg: dict) -> list:
+    matches = [to_dict(g) for g in w.groups.list(filter='displayName eq "admins"')]
+    if not matches:
         return [
             Finding(
                 category=CATEGORY_LABEL,
                 check_id="SEC-002",
                 title="Workspace admin membership",
                 status=Status.ERROR,
-                detail="Could not locate the built-in 'admins' group via SCIM.",
+                detail="Could not locate the built-in 'admins' group via the Groups API.",
             )
         ]
 
-    admins_group = resources[0]
-    group_id = admins_group.get("id")
-    detail = client.get(f"/api/2.0/preview/scim/v2/Groups/{group_id}")
+    admins_group_id = matches[0].get("id")
+    detail = to_dict(w.groups.get(id=admins_group_id))
     members = detail.get("members", []) or []
 
-    direct_users = [m for m in members if (m.get("$ref", "") or "").startswith("Users/") or "userName" in m]
-    nested_groups = [m for m in members if (m.get("$ref", "") or "").startswith("Groups/")]
+    def _ref(m: dict) -> str:
+        return (m.get("$ref") or m.get("ref") or "") or ""
+
+    direct_users = [m for m in members if _ref(m).startswith("Users/") or "user_name" in m]
+    nested_groups = [m for m in members if _ref(m).startswith("Groups/")]
 
     expected_groups = set(cfg.get("thresholds", {}).get("admin_group", {}).get("expected_admin_group_names", []))
     nested_names = {m.get("display") for m in nested_groups}
@@ -162,8 +171,8 @@ def _sec002_admin_membership(client: DatabricksClient, cfg: dict) -> list:
     ]
 
 
-def _sec003_token_hygiene(client: DatabricksClient, cfg: dict) -> list:
-    if not client.is_admin():
+def _sec003_token_hygiene(w: "WorkspaceClient", cfg: dict, is_admin: bool) -> list:
+    if not is_admin:
         return [
             Finding(
                 category=CATEGORY_LABEL,
@@ -176,8 +185,7 @@ def _sec003_token_hygiene(client: DatabricksClient, cfg: dict) -> list:
         ]
 
     max_days = cfg.get("thresholds", {}).get("tokens", {}).get("max_lifetime_days", 90)
-    resp = client.get("/api/2.0/token-management/tokens")
-    tokens = resp.get("token_infos", []) or []
+    tokens = [to_dict(t) for t in w.token_management.list()]
 
     if not tokens:
         return [
@@ -243,8 +251,8 @@ def _sec003_token_hygiene(client: DatabricksClient, cfg: dict) -> list:
     return findings
 
 
-def _sec004_secret_scopes(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
-    scopes = client.get("/api/2.0/secrets/scopes/list").get("scopes", []) or []
+def _sec004_secret_scopes(w: "WorkspaceClient", cfg: dict, is_prod_like: bool) -> list:
+    scopes = [to_dict(s) for s in w.secrets.list_scopes()]
     if not scopes:
         return [
             Finding(
@@ -265,8 +273,8 @@ def _sec004_secret_scopes(client: DatabricksClient, cfg: dict, is_prod_like: boo
         if is_prod_like and backend == "DATABRICKS":
             databricks_backed_in_prod.append(name)
         try:
-            acls = client.get("/api/2.0/secrets/acls/list", params={"scope": name}).get("items", []) or []
-        except PermissionError:
+            acls = [to_dict(a) for a in w.secrets.list_acls(scope=name)]
+        except (PermissionDenied, DatabricksError):
             acls = []
         for acl in acls:
             if acl.get("principal") in ("users", "account users") and acl.get("permission") in ("MANAGE", "WRITE"):
@@ -319,10 +327,9 @@ def _sec004_secret_scopes(client: DatabricksClient, cfg: dict, is_prod_like: boo
     return findings
 
 
-def _sec005_ip_access_lists(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
+def _sec005_ip_access_lists(w: "WorkspaceClient", cfg: dict, is_prod_like: bool) -> list:
     require = cfg.get("thresholds", {}).get("ip_access_lists", {}).get("require_in_production_like", True)
-    resp = client.get("/api/2.0/ip-access-lists")
-    lists_ = resp.get("ip_access_lists", []) or []
+    lists_ = [to_dict(l) for l in w.ip_access_lists.list()]
     enabled = [l for l in lists_ if l.get("enabled")]
 
     if is_prod_like and require and not enabled:
@@ -351,9 +358,9 @@ def _sec005_ip_access_lists(client: DatabricksClient, cfg: dict, is_prod_like: b
     ]
 
 
-def _sec006_cluster_policies(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
+def _sec006_cluster_policies(w: "WorkspaceClient", cfg: dict, is_prod_like: bool) -> list:
     require = cfg.get("thresholds", {}).get("clusters", {}).get("require_cluster_policy_in_prod", True)
-    policies = client.get("/api/2.0/policies/clusters/list").get("policies", []) or []
+    policies = [to_dict(p) for p in w.cluster_policies.list()]
     if not policies:
         return [
             Finding(
@@ -380,8 +387,8 @@ def _sec006_cluster_policies(client: DatabricksClient, cfg: dict, is_prod_like: 
     ]
 
 
-def _sec007_token_policy(client: DatabricksClient, cfg: dict) -> list:
-    if not client.is_admin():
+def _sec007_token_policy(w: "WorkspaceClient", cfg: dict, is_admin: bool) -> list:
+    if not is_admin:
         return [
             Finding(
                 category=CATEGORY_LABEL,
@@ -391,19 +398,37 @@ def _sec007_token_policy(client: DatabricksClient, cfg: dict) -> list:
                 detail="Requires an admin identity to read the workspace token policy.",
             )
         ]
-    try:
-        policy = client.get("/api/2.0/token-management/token-policy")
-    except Exception:
+
+    get_policy = getattr(w.token_management, "get_token_policy", None)
+    if not callable(get_policy):
         return [
             Finding(
                 category=CATEGORY_LABEL,
                 check_id="SEC-007",
                 title="Org-wide maximum token lifetime policy",
                 status=Status.INFO,
-                detail="This workspace/API version does not expose a token-policy endpoint; check the admin console manually (Settings -> Admin Console -> Workspace settings -> Personal access tokens).",
+                detail=(
+                    "This installed databricks-sdk version doesn't expose a token-policy call; "
+                    "check the admin console manually (Settings -> Admin Console -> Workspace "
+                    "settings -> Personal access tokens)."
+                ),
             )
         ]
-    max_lifetime = safe_get(policy, "token_policy", "max_token_lifetime_days")
+
+    try:
+        policy = to_dict(get_policy())
+    except (PermissionDenied, DatabricksError):
+        return [
+            Finding(
+                category=CATEGORY_LABEL,
+                check_id="SEC-007",
+                title="Org-wide maximum token lifetime policy",
+                status=Status.INFO,
+                detail="Could not read the token policy with this identity/SDK version; check the admin console manually.",
+            )
+        ]
+
+    max_lifetime = safe_get(policy, "token_policy", "max_token_lifetime_days") or policy.get("max_token_lifetime_days")
     if not max_lifetime:
         return [
             Finding(
@@ -427,13 +452,13 @@ def _sec007_token_policy(client: DatabricksClient, cfg: dict) -> list:
     ]
 
 
-def run(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
+def run(w: "WorkspaceClient", cfg: dict, is_prod_like: bool, is_admin: bool) -> list:
     findings: list = []
-    findings += run_check(lambda: _sec001_scim_group_sync(client, cfg), category=CATEGORY_LABEL, check_id="SEC-001", title="Entra ID / SCIM group sync")
-    findings += run_check(lambda: _sec002_admin_membership(client, cfg), category=CATEGORY_LABEL, check_id="SEC-002", title="Workspace admin membership")
-    findings += run_check(lambda: _sec003_token_hygiene(client, cfg), category=CATEGORY_LABEL, check_id="SEC-003", title="Personal access token hygiene")
-    findings += run_check(lambda: _sec004_secret_scopes(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-004", title="Secret scope backing & ACLs")
-    findings += run_check(lambda: _sec005_ip_access_lists(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-005", title="IP access lists")
-    findings += run_check(lambda: _sec006_cluster_policies(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-006", title="Cluster policy enforcement")
-    findings += run_check(lambda: _sec007_token_policy(client, cfg), category=CATEGORY_LABEL, check_id="SEC-007", title="Org-wide maximum token lifetime policy")
+    findings += run_check(lambda: _sec001_scim_group_sync(w, cfg), category=CATEGORY_LABEL, check_id="SEC-001", title="Entra ID / SCIM group sync")
+    findings += run_check(lambda: _sec002_admin_membership(w, cfg), category=CATEGORY_LABEL, check_id="SEC-002", title="Workspace admin membership")
+    findings += run_check(lambda: _sec003_token_hygiene(w, cfg, is_admin), category=CATEGORY_LABEL, check_id="SEC-003", title="Personal access token hygiene")
+    findings += run_check(lambda: _sec004_secret_scopes(w, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-004", title="Secret scope backing & ACLs")
+    findings += run_check(lambda: _sec005_ip_access_lists(w, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-005", title="IP access lists")
+    findings += run_check(lambda: _sec006_cluster_policies(w, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="SEC-006", title="Cluster policy enforcement")
+    findings += run_check(lambda: _sec007_token_policy(w, cfg, is_admin), category=CATEGORY_LABEL, check_id="SEC-007", title="Org-wide maximum token lifetime policy")
     return findings

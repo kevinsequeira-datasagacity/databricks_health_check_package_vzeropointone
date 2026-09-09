@@ -48,9 +48,9 @@ _SEVERITY_LABEL = {
 # Fixed categorical order -- one hue per category key, stable across runs.
 _CATEGORY_HUE = {
     "security_iam": ("#2a78d6", "#3987e5"),      # blue
-    "compute_cost": ("#eb6834", "#d95926"),      # orange
-    "data_governance": ("#1baf7a", "#199e70"),   # aqua
-    "jobs_devops": ("#eda100", "#c98500"),       # yellow
+    "compute": ("#eb6834", "#d95926"),           # orange
+    "unity_catalog": ("#1baf7a", "#199e70"),     # aqua
+    "jobs_cicd": ("#eda100", "#c98500"),         # yellow
 }
 _DEFAULT_HUE = ("#4a3aa7", "#9085e9")  # violet, for any category outside the fixed four
 

@@ -3,16 +3,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from health_check.utils import Finding, Status, Severity
-from health_check.scoring import build_scorecard, grade_for, DEFAULT_GRADE_BANDS
+from health_check_sdk.utils import Finding, Status, Severity
+from health_check_sdk.scoring import build_scorecard, grade_for, DEFAULT_GRADE_BANDS
 
 
 def _findings_by_category(**overrides):
     base = {
         "security_iam": {"label": "Security & IAM", "weight": 0.3, "findings": []},
-        "compute_cost": {"label": "Compute & Cost Hygiene", "weight": 0.25, "findings": []},
-        "data_governance": {"label": "Data Governance", "weight": 0.25, "findings": []},
-        "jobs_devops": {"label": "Jobs, Workflows & DevOps", "weight": 0.2, "findings": []},
+        "compute": {"label": "Compute", "weight": 0.25, "findings": []},
+        "unity_catalog": {"label": "Unity Catalog", "weight": 0.25, "findings": []},
+        "jobs_cicd": {"label": "Jobs & CI/CD", "weight": 0.2, "findings": []},
     }
     for key, findings in overrides.items():
         base[key]["findings"] = findings

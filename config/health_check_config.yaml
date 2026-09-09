@@ -1,5 +1,5 @@
 # =============================================================================
-# Databricks Workspace Health Check -- configuration
+# Databricks Workspace Health Check (SDK edition) -- configuration
 #
 # Tune these values per client / environment without touching any check code.
 # The orchestrator notebook loads this file and passes it into every check
@@ -12,14 +12,14 @@ categories:
   security_iam:
     label: "Security & IAM"
     weight: 0.30
-  compute_cost:
-    label: "Compute & Cost Hygiene"
+  compute:
+    label: "Compute"
     weight: 0.25
-  data_governance:
-    label: "Data Governance (Unity Catalog)"
+  unity_catalog:
+    label: "Unity Catalog"
     weight: 0.25
-  jobs_devops:
-    label: "Jobs, Workflows & DevOps"
+  jobs_cicd:
+    label: "Jobs & CI/CD"
     weight: 0.20
 
 # Score bands used to turn a 0-100 score into a letter grade in the report.
@@ -62,7 +62,7 @@ thresholds:
     expected_admin_group_names:
       - "Databricks-Workspace-Admins"
 
-  # ---- Compute & cost hygiene ----------------------------------------
+  # ---- Compute ---------------------------------------------------------
   clusters:
     max_autotermination_minutes: 120   # interactive clusters idle longer than this are flagged
     min_dbr_lts_major_minor: "13.3"    # oldest LTS runtime considered current
@@ -75,17 +75,17 @@ thresholds:
   jobs_compute:
     max_all_purpose_job_ratio: 0.20    # >20% of jobs running on all-purpose clusters is flagged
 
-  # ---- Data governance (Unity Catalog) --------------------------------
+  # ---- Unity Catalog ----------------------------------------------------
   unity_catalog:
-    flag_account_users_broad_grants: true   # ALL PRIVILEGES / catalog-level grants to `account users`
+    flag_account_users_broad_grants: true   # ALL_PRIVILEGES / catalog-level grants to `account users`
     broad_privileges:
-      - "ALL PRIVILEGES"
+      - "ALL_PRIVILEGES"
     delta_health:
       sample_tables_per_schema: 5           # cap on DESCRIBE DETAIL calls per schema, keeps runtime bounded
       max_small_file_ratio: 0.30            # flag tables where >30% of files are "small" (<16MB heuristic)
       vacuum_stale_days: 30                 # flag tables not VACUUMed (or unknown) beyond this
 
-  # ---- Jobs, workflows & DevOps ----------------------------------------
+  # ---- Jobs & CI/CD -------------------------------------------------------
   jobs:
     lookback_days: 30
     max_failure_rate: 0.15          # >15% failed runs in the lookback window is flagged
@@ -93,8 +93,7 @@ thresholds:
     require_service_principal_run_as_in_prod: true
   repos:
     # Databricks Repos `provider` values considered approved. JOB-006 flags
-    # any checked-out repo whose provider isn't in this list. Add/remove
-    # entries here if the client's approved git platforms change -- valid
+    # any checked-out repo whose provider isn't in this list. Valid
     # Databricks provider values include: azureDevOpsServices, gitHub,
     # gitHubEnterprise, gitLab, gitLabEnterpriseEdition, bitbucketCloud,
     # bitbucketServer, awsCodeCommit.

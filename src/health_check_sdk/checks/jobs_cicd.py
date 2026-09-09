@@ -1,9 +1,8 @@
 """
-Jobs, workflows & git platform integration checks.
+Jobs & CI/CD checks, built on databricks-sdk's WorkspaceClient.
 
 Accepts both Azure DevOps and GitHub as approved git providers throughout
-(the client may run either, or both, across their four workspaces) -- see
-`thresholds.repos.expected_git_providers` in the config.
+(see `thresholds.repos.expected_git_providers` in the config).
 
   JOB-001  Retry & timeout hygiene per job/task
   JOB-002  Failure notifications configured
@@ -14,11 +13,34 @@ Accepts both Azure DevOps and GitHub as approved git providers throughout
 """
 from __future__ import annotations
 
-from ..api_client import DatabricksClient
-from ..utils import Finding, Severity, Status, safe_get, run_check
+import datetime as dt
+from typing import TYPE_CHECKING
 
-CATEGORY = "jobs_devops"
-CATEGORY_LABEL = "Jobs, Workflows & DevOps"
+from ..utils import Finding, Severity, Status, run_check, safe_get, to_dict
+
+if TYPE_CHECKING:
+    from databricks.sdk import WorkspaceClient
+
+CATEGORY = "jobs_cicd"
+CATEGORY_LABEL = "Jobs & CI/CD"
+
+# Maps a Databricks Repos `provider` value to a friendly name for messages.
+# Extend this alongside `expected_git_providers` in the config if the client
+# adds another platform (e.g. GitLab, Bitbucket).
+_PROVIDER_LABELS = {
+    "azureDevOpsServices": "Azure DevOps",
+    "gitHub": "GitHub",
+    "gitHubEnterprise": "GitHub Enterprise",
+    "gitLab": "GitLab",
+    "gitLabEnterpriseEdition": "GitLab Enterprise",
+    "bitbucketCloud": "Bitbucket Cloud",
+    "bitbucketServer": "Bitbucket Server",
+    "awsCodeCommit": "AWS CodeCommit",
+}
+
+
+def _provider_label(provider: str) -> str:
+    return _PROVIDER_LABELS.get(provider, provider or "unknown")
 
 
 def _iter_tasks(settings: dict):
@@ -29,8 +51,13 @@ def _iter_tasks(settings: dict):
     return [settings]
 
 
-def _job001_retry_timeout(client: DatabricksClient, limits: dict) -> list:
-    jobs = list(client.get_pages("/api/2.1/jobs/list", {"expand_tasks": "true"}, items_key="jobs"))[: limits.get("max_jobs_to_inspect", 500)]
+def _list_jobs(w: "WorkspaceClient", limits: dict) -> list:
+    jobs = [to_dict(j) for j in w.jobs.list(expand_tasks=True)]
+    return jobs[: limits.get("max_jobs_to_inspect", 500)]
+
+
+def _job001_retry_timeout(w: "WorkspaceClient", limits: dict) -> list:
+    jobs = _list_jobs(w, limits)
     if not jobs:
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-001", title="Retry & timeout hygiene", status=Status.INFO, detail="No jobs defined.")]
 
@@ -62,8 +89,8 @@ def _job001_retry_timeout(client: DatabricksClient, limits: dict) -> list:
     return [Finding(category=CATEGORY_LABEL, check_id="JOB-001", title="Retry & timeout hygiene", status=Status.PASS, detail=f"All {len(jobs)} job(s) have a timeout and/or retry policy.")]
 
 
-def _job002_notifications(client: DatabricksClient, limits: dict, is_prod_like: bool) -> list:
-    jobs = list(client.get_pages("/api/2.1/jobs/list", {"expand_tasks": "true"}, items_key="jobs"))[: limits.get("max_jobs_to_inspect", 500)]
+def _job002_notifications(w: "WorkspaceClient", limits: dict, is_prod_like: bool) -> list:
+    jobs = _list_jobs(w, limits)
     if not jobs:
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-002", title="Failure notifications", status=Status.INFO, detail="No jobs defined.")]
 
@@ -97,9 +124,9 @@ def _job002_notifications(client: DatabricksClient, limits: dict, is_prod_like: 
     return [Finding(category=CATEGORY_LABEL, check_id="JOB-002", title="Failure notifications", status=Status.PASS, detail=f"All {len(jobs)} job(s) have failure notifications configured.")]
 
 
-def _job003_git_source(client: DatabricksClient, cfg: dict, limits: dict, is_prod_like: bool) -> list:
+def _job003_git_source(w: "WorkspaceClient", cfg: dict, limits: dict, is_prod_like: bool) -> list:
     require = cfg.get("thresholds", {}).get("jobs", {}).get("require_git_source_in_prod", True)
-    jobs = list(client.get_pages("/api/2.1/jobs/list", {"expand_tasks": "true"}, items_key="jobs"))[: limits.get("max_jobs_to_inspect", 500)]
+    jobs = _list_jobs(w, limits)
     if not jobs:
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-003", title="CI/CD deployment (git_source)", status=Status.INFO, detail="No jobs defined.")]
 
@@ -143,12 +170,12 @@ def _job003_git_source(client: DatabricksClient, cfg: dict, limits: dict, is_pro
     ]
 
 
-def _job004_run_as(client: DatabricksClient, cfg: dict, limits: dict, is_prod_like: bool) -> list:
+def _job004_run_as(w: "WorkspaceClient", cfg: dict, limits: dict, is_prod_like: bool) -> list:
     require = cfg.get("thresholds", {}).get("jobs", {}).get("require_service_principal_run_as_in_prod", True)
     if not (is_prod_like and require):
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity", status=Status.NOT_APPLICABLE, detail="Only enforced in production-like environments.")]
 
-    jobs = list(client.get_pages("/api/2.1/jobs/list", {"expand_tasks": "true"}, items_key="jobs"))[: limits.get("max_jobs_to_inspect", 500)]
+    jobs = _list_jobs(w, limits)
     if not jobs:
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity", status=Status.INFO, detail="No jobs defined.")]
 
@@ -175,20 +202,15 @@ def _job004_run_as(client: DatabricksClient, cfg: dict, limits: dict, is_prod_li
     return [Finding(category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity", status=Status.PASS, detail=f"All {len(jobs)} job(s) run as a service principal.")]
 
 
-def _job005_failure_rate(client: DatabricksClient, cfg: dict, limits: dict) -> list:
-    import datetime as dt
-
+def _job005_failure_rate(w: "WorkspaceClient", cfg: dict, limits: dict) -> list:
     lookback_days = cfg.get("thresholds", {}).get("jobs", {}).get("lookback_days", 30)
     max_failure_rate = cfg.get("thresholds", {}).get("jobs", {}).get("max_failure_rate", 0.15)
     start_ms = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=lookback_days)).timestamp() * 1000)
 
-    runs = list(
-        client.get_pages(
-            "/api/2.1/jobs/runs/list",
-            {"start_time_from": start_ms, "completed_only": "true", "limit": 25},
-            items_key="runs",
-        )
-    )
+    runs = [
+        to_dict(r)
+        for r in w.jobs.list_runs(start_time_from=start_ms, completed_only=True, limit=25)
+    ]
     runs = runs[: limits.get("max_jobs_to_inspect", 500) * 5]
     if not runs:
         return [Finding(category=CATEGORY_LABEL, check_id="JOB-005", title="Job run failure rate", status=Status.INFO, detail=f"No completed job runs in the last {lookback_days} days.")]
@@ -239,37 +261,13 @@ def _job005_failure_rate(client: DatabricksClient, cfg: dict, limits: dict) -> l
     ]
 
 
-# Maps a Databricks Repos `provider` value to a friendly name for messages.
-# Extend this alongside `expected_git_providers` in the config if the client
-# adds another platform (e.g. GitLab, Bitbucket).
-_PROVIDER_LABELS = {
-    "azureDevOpsServices": "Azure DevOps",
-    "gitHub": "GitHub",
-    "gitHubEnterprise": "GitHub Enterprise",
-    "gitLab": "GitLab",
-    "gitLabEnterpriseEdition": "GitLab Enterprise",
-    "bitbucketCloud": "Bitbucket Cloud",
-    "bitbucketServer": "Bitbucket Server",
-    "awsCodeCommit": "AWS CodeCommit",
-}
-
-
-def _provider_label(provider: str) -> str:
-    return _PROVIDER_LABELS.get(provider, provider or "unknown")
-
-
-def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
+def _job006_repos_linkage(w: "WorkspaceClient", cfg: dict, is_prod_like: bool) -> list:
     repos_cfg = cfg.get("thresholds", {}).get("repos", {})
-    expected_providers = repos_cfg.get("expected_git_providers")
-    if not expected_providers:
-        # Back-compat with an older single-provider config key.
-        single = repos_cfg.get("expected_git_provider")
-        expected_providers = [single] if single else ["azureDevOpsServices", "gitHub"]
+    expected_providers = repos_cfg.get("expected_git_providers") or ["azureDevOpsServices", "gitHub"]
     require_pinned = repos_cfg.get("require_pinned_ref_in_prod", True)
-
     expected_labels = ", ".join(_provider_label(p) for p in expected_providers)
 
-    repos = list(client.get_pages("/api/2.0/repos", {}, items_key="repos"))
+    repos = [to_dict(r) for r in w.repos.list()]
     if not repos:
         return [
             Finding(
@@ -324,13 +322,13 @@ def _job006_repos_linkage(client: DatabricksClient, cfg: dict, is_prod_like: boo
     return findings
 
 
-def run(client: DatabricksClient, cfg: dict, is_prod_like: bool) -> list:
+def run(w: "WorkspaceClient", cfg: dict, is_prod_like: bool) -> list:
     limits = cfg.get("limits", {})
     findings: list = []
-    findings += run_check(lambda: _job001_retry_timeout(client, limits), category=CATEGORY_LABEL, check_id="JOB-001", title="Retry & timeout hygiene")
-    findings += run_check(lambda: _job002_notifications(client, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-002", title="Failure notifications")
-    findings += run_check(lambda: _job003_git_source(client, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-003", title="CI/CD deployment (git_source)")
-    findings += run_check(lambda: _job004_run_as(client, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity")
-    findings += run_check(lambda: _job005_failure_rate(client, cfg, limits), category=CATEGORY_LABEL, check_id="JOB-005", title="Job run failure rate")
-    findings += run_check(lambda: _job006_repos_linkage(client, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-006", title="Databricks Repos <-> git provider linkage")
+    findings += run_check(lambda: _job001_retry_timeout(w, limits), category=CATEGORY_LABEL, check_id="JOB-001", title="Retry & timeout hygiene")
+    findings += run_check(lambda: _job002_notifications(w, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-002", title="Failure notifications")
+    findings += run_check(lambda: _job003_git_source(w, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-003", title="CI/CD deployment (git_source)")
+    findings += run_check(lambda: _job004_run_as(w, cfg, limits, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-004", title="Job run-as identity")
+    findings += run_check(lambda: _job005_failure_rate(w, cfg, limits), category=CATEGORY_LABEL, check_id="JOB-005", title="Job run failure rate")
+    findings += run_check(lambda: _job006_repos_linkage(w, cfg, is_prod_like), category=CATEGORY_LABEL, check_id="JOB-006", title="Databricks Repos <-> git provider linkage")
     return findings

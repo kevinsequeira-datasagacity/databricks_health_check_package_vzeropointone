@@ -81,7 +81,7 @@
           </div>
           <div style="text-align:right;">
             <span class="hc-badge">PROD</span>
-            <div class="sub" style="margin-top:6px;">Generated 2026-09-07 01:47 UTC</div>
+            <div class="sub" style="margin-top:6px;">Generated 2026-09-09 13:06 UTC</div>
           </div>
         </div>
 
@@ -112,7 +112,7 @@
     
       <div class="hc-cat">
         <div class="hc-cat-top">
-          <span class="hc-cat-label">Compute &amp; Cost Hygiene</span>
+          <span class="hc-cat-label">Compute</span>
           <span class="hc-cat-score">81/100 &middot; B - Minor issues</span>
         </div>
         <div class="hc-bar-track"><div class="hc-bar-fill" style="width:81%; background:#eb6834;"></div></div>
@@ -124,7 +124,7 @@
     
       <div class="hc-cat">
         <div class="hc-cat-top">
-          <span class="hc-cat-label">Data Governance (Unity Catalog)</span>
+          <span class="hc-cat-label">Unity Catalog</span>
           <span class="hc-cat-score">72/100 &middot; C - Needs attention</span>
         </div>
         <div class="hc-bar-track"><div class="hc-bar-fill" style="width:72%; background:#1baf7a;"></div></div>
@@ -136,7 +136,7 @@
     
       <div class="hc-cat">
         <div class="hc-cat-top">
-          <span class="hc-cat-label">Jobs, Workflows &amp; DevOps</span>
+          <span class="hc-cat-label">Jobs &amp; CI/CD</span>
           <span class="hc-cat-score">70/100 &middot; C - Needs attention</span>
         </div>
         <div class="hc-bar-track"><div class="hc-bar-fill" style="width:70%; background:#eda100;"></div></div>
@@ -153,9 +153,9 @@
           <div class="hc-section-title" style="margin-top:0;">Priority actions</div>
           <ul class='hc-reco-list'><li>
               <span class="hc-status-chip" style="background:#d03b3b26; color:var(--text-1);"><span style="color:#d03b3b;">✕</span> FAIL</span> <span class="hc-sev">Critical</span>
-              &middot; <span class="hc-check-id">DG-002</span> &middot; <b>Data Governance (Unity Catalog)</b><br/>
+              &middot; <span class="hc-check-id">UC-002</span> &middot; <b>Unity Catalog</b><br/>
               <div class="hc-title-cell" style="margin-top:2px;">Broad catalog-level grants</div>
-              <div class="hc-detail">1 catalog(s) grant broad privileges to a workspace-wide principal: prod_gold -&gt; account users: [&#x27;ALL PRIVILEGES&#x27;]</div>
+              <div class="hc-detail">1 catalog(s) grant broad privileges to a workspace-wide principal: prod_gold -&gt; account users: [&#x27;ALL_PRIVILEGES&#x27;]</div>
               <div class="hc-reco"><b>Recommendation:</b> Replace catalog-wide grants to &#x27;account users&#x27;/&#x27;users&#x27; with least-privilege grants to specific Entra ID groups (e.g. read-only analyst groups, per-domain owner groups).</div>
             </li><li>
               <span class="hc-status-chip" style="background:#d03b3b26; color:var(--text-1);"><span style="color:#d03b3b;">✕</span> FAIL</span> <span class="hc-sev">High</span>
@@ -177,19 +177,19 @@
               <div class="hc-reco"><b>Recommendation:</b> Scope MANAGE/WRITE ACLs to specific admin groups or service principals, not all users.</div>
             </li><li>
               <span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span> <span class="hc-sev">High</span>
-              &middot; <span class="hc-check-id">JOB-002</span> &middot; <b>Jobs, Workflows &amp; DevOps</b><br/>
+              &middot; <span class="hc-check-id">JOB-002</span> &middot; <b>Jobs &amp; CI/CD</b><br/>
               <div class="hc-title-cell" style="margin-top:2px;">Failure notifications</div>
               <div class="hc-detail">2/3 job(s) have no on_failure email or webhook notification configured: adhoc_report_refresh, legacy_notebook_job</div>
               <div class="hc-reco"><b>Recommendation:</b> Add on_failure email or webhook (Slack/Teams/PagerDuty) notifications, especially for scheduled production jobs.</div>
             </li><li>
               <span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span> <span class="hc-sev">High</span>
-              &middot; <span class="hc-check-id">JOB-003</span> &middot; <b>Jobs, Workflows &amp; DevOps</b><br/>
+              &middot; <span class="hc-check-id">JOB-003</span> &middot; <b>Jobs &amp; CI/CD</b><br/>
               <div class="hc-title-cell" style="margin-top:2px;">CI/CD deployment (git_source)</div>
               <div class="hc-detail">2/3 job(s) are defined against workspace-local notebook paths rather than a git_source: adhoc_report_refresh, legacy_notebook_job</div>
-              <div class="hc-reco"><b>Recommendation:</b> Deploy production jobs from the Azure DevOps repo via a Databricks Asset Bundle (or job git_source pointing at a tagged commit) so job definitions are versioned, reviewed via PR, and reproducible from source control.</div>
+              <div class="hc-reco"><b>Recommendation:</b> Deploy production jobs from your Azure DevOps or GitHub repo via a Databricks Asset Bundle (or job git_source pointing at a tagged commit/release) so job definitions are versioned, reviewed via PR, and reproducible from source control.</div>
             </li><li>
               <span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span> <span class="hc-sev">High</span>
-              &middot; <span class="hc-check-id">JOB-005</span> &middot; <b>Jobs, Workflows &amp; DevOps</b><br/>
+              &middot; <span class="hc-check-id">JOB-005</span> &middot; <b>Jobs &amp; CI/CD</b><br/>
               <div class="hc-title-cell" style="margin-top:2px;">Job run failure rate</div>
               <div class="hc-detail">1 job(s) exceed a 15% failure rate over the last 30 days: adhoc_report_refresh (3/5 = 60%)</div>
               <div class="hc-reco"><b>Recommendation:</b> Investigate root cause (data issues, capacity, upstream dependency) for the flagged jobs; consider tightening retry/backoff or alerting sooner.</div>
@@ -219,7 +219,7 @@
               <div class="hc-reco"><b>Recommendation:</b> Set a maximum token lifetime in Admin Console -&gt; Workspace settings -&gt; Personal access tokens.</div>
             </li><li>
               <span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span> <span class="hc-sev">Medium</span>
-              &middot; <span class="hc-check-id">COST-001</span> &middot; <b>Compute &amp; Cost Hygiene</b><br/>
+              &middot; <span class="hc-check-id">CMP-001</span> &middot; <b>Compute</b><br/>
               <div class="hc-title-cell" style="margin-top:2px;">Interactive cluster autotermination</div>
               <div class="hc-detail">1 of 2 all-purpose cluster(s) have no autotermination set, or it exceeds 120 minutes: shared-allpurpose</div>
               <div class="hc-reco"><b>Recommendation:</b> Set autotermination_minutes &lt;= 120 on interactive clusters, or enforce it via cluster policy.</div>
@@ -325,7 +325,7 @@
         <td class="hc-check-id">SEC-001</td>
         <td>
           <div class="hc-title-cell">Entra ID / SCIM group sync</div>
-          <div class="hc-detail">3 of 5 group(s) are SCIM-provisioned (carry an externalId).</div>
+          <div class="hc-detail">3 of 5 group(s) are SCIM-provisioned (carry an external_id).</div>
           
         </td>
       </tr>
@@ -339,14 +339,14 @@
           
         </td>
       </tr>
-    </tbody></table></details><div class="hc-section-title">Compute &amp; Cost Hygiene</div>
+    </tbody></table></details><div class="hc-section-title">Compute</div>
       <table class="hc-findings">
         <thead><tr><th style="width:110px">Status</th><th style="width:80px">Check</th><th>Finding</th></tr></thead>
         <tbody>
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Medium</span></td>
-        <td class="hc-check-id">COST-001</td>
+        <td class="hc-check-id">CMP-001</td>
         <td>
           <div class="hc-title-cell">Interactive cluster autotermination</div>
           <div class="hc-detail">1 of 2 all-purpose cluster(s) have no autotermination set, or it exceeds 120 minutes: shared-allpurpose</div>
@@ -356,7 +356,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Medium</span></td>
-        <td class="hc-check-id">COST-002</td>
+        <td class="hc-check-id">CMP-002</td>
         <td>
           <div class="hc-title-cell">Cluster runtime (DBR) version currency</div>
           <div class="hc-detail">1 of 3 cluster(s) run a DBR version older than the 13.3 LTS baseline: shared-allpurpose (11.3.x-scala2.12)</div>
@@ -366,7 +366,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Medium</span></td>
-        <td class="hc-check-id">COST-003</td>
+        <td class="hc-check-id">CMP-003</td>
         <td>
           <div class="hc-title-cell">Cluster policy attachment</div>
           <div class="hc-detail">Only 1/2 (50%) interactive clusters are attached to a cluster policy.</div>
@@ -376,7 +376,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Low</span></td>
-        <td class="hc-check-id">COST-004</td>
+        <td class="hc-check-id">CMP-004</td>
         <td>
           <div class="hc-title-cell">Cost-allocation tagging</div>
           <div class="hc-detail">1/2 cluster(s) are missing one or more required tags (environment, cost-center).</div>
@@ -386,7 +386,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Low</span></td>
-        <td class="hc-check-id">COST-005</td>
+        <td class="hc-check-id">CMP-005</td>
         <td>
           <div class="hc-title-cell">Instance pool sizing</div>
           <div class="hc-detail">1 pool(s) keep more than half their max capacity idle at all times: warm-pool</div>
@@ -396,7 +396,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Medium</span></td>
-        <td class="hc-check-id">COST-006</td>
+        <td class="hc-check-id">CMP-006</td>
         <td>
           <div class="hc-title-cell">SQL warehouse auto-stop</div>
           <div class="hc-detail">1 classic/pro warehouse(s) have auto-stop above 30 minutes: analytics-wh (120m)</div>
@@ -406,31 +406,31 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Medium</span></td>
-        <td class="hc-check-id">COST-007</td>
+        <td class="hc-check-id">CMP-007</td>
         <td>
           <div class="hc-title-cell">Job cluster vs. all-purpose usage</div>
-          <div class="hc-detail">2/3 (67%) job tasks run on a shared all-purpose cluster rather than a dedicated job cluster, above the 20% guideline. Affected jobs include: adhoc_report_refresh, legacy_notebook_job</div>
+          <div class="hc-detail">2/3 (67%) job tasks run on a shared all-purpose cluster rather than a dedicated job cluster, above the 20% guideline. Affected jobs include: legacy_notebook_job, adhoc_report_refresh</div>
           <div class="hc-reco"><b>Recommendation:</b> Switch scheduled jobs to job clusters (new_cluster) sized for the workload. All-purpose clusters cost more per DBU and mix workloads&#x27; compute together, making cost attribution and isolation harder.</div>
         </td>
       </tr>
-    </tbody></table><div class="hc-section-title">Data Governance (Unity Catalog)</div>
+    </tbody></table><div class="hc-section-title">Unity Catalog</div>
       <table class="hc-findings">
         <thead><tr><th style="width:110px">Status</th><th style="width:80px">Check</th><th>Finding</th></tr></thead>
         <tbody>
     
       <tr>
         <td><span class="hc-status-chip" style="background:#d03b3b26; color:var(--text-1);"><span style="color:#d03b3b;">✕</span> FAIL</span><br/><span class='hc-sev'>Critical</span></td>
-        <td class="hc-check-id">DG-002</td>
+        <td class="hc-check-id">UC-002</td>
         <td>
           <div class="hc-title-cell">Broad catalog-level grants</div>
-          <div class="hc-detail">1 catalog(s) grant broad privileges to a workspace-wide principal: prod_gold -&gt; account users: [&#x27;ALL PRIVILEGES&#x27;]</div>
+          <div class="hc-detail">1 catalog(s) grant broad privileges to a workspace-wide principal: prod_gold -&gt; account users: [&#x27;ALL_PRIVILEGES&#x27;]</div>
           <div class="hc-reco"><b>Recommendation:</b> Replace catalog-wide grants to &#x27;account users&#x27;/&#x27;users&#x27; with least-privilege grants to specific Entra ID groups (e.g. read-only analyst groups, per-domain owner groups).</div>
         </td>
       </tr>
     
       <tr>
         <td><span class="hc-status-chip" style="background:#fab21926; color:var(--text-1);"><span style="color:#fab219;">⚠</span> WARN</span><br/><span class='hc-sev'>Low</span></td>
-        <td class="hc-check-id">DG-005</td>
+        <td class="hc-check-id">UC-005</td>
         <td>
           <div class="hc-title-cell">System schema (system.*) enablement</div>
           <div class="hc-detail">System schema(s) not enabled (or not visible to this identity): lineage.</div>
@@ -444,7 +444,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#2a78d626; color:var(--text-1);"><span style="color:#2a78d6;">ℹ</span> INFO</span><br/></td>
-        <td class="hc-check-id">DG-001b</td>
+        <td class="hc-check-id">UC-001b</td>
         <td>
           <div class="hc-title-cell">Catalogs with open workspace binding</div>
           <div class="hc-detail">1 catalog(s) are bound to ALL workspaces on the metastore (isolation_mode=OPEN): prod_silver</div>
@@ -454,7 +454,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#2a78d626; color:var(--text-1);"><span style="color:#2a78d6;">ℹ</span> INFO</span><br/></td>
-        <td class="hc-check-id">DG-003b</td>
+        <td class="hc-check-id">UC-003b</td>
         <td>
           <div class="hc-title-cell">Unused storage credentials</div>
           <div class="hc-detail">1 storage credential(s) aren&#x27;t referenced by any external location: cred-orphaned-legacy</div>
@@ -464,7 +464,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#2a78d626; color:var(--text-1);"><span style="color:#2a78d6;">ℹ</span> INFO</span><br/></td>
-        <td class="hc-check-id">DG-003c</td>
+        <td class="hc-check-id">UC-003c</td>
         <td>
           <div class="hc-title-cell">Writable external locations</div>
           <div class="hc-detail">1 external location(s) are read-write: raw-landing</div>
@@ -474,7 +474,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#2a78d626; color:var(--text-1);"><span style="color:#2a78d6;">ℹ</span> INFO</span><br/></td>
-        <td class="hc-check-id">DG-004</td>
+        <td class="hc-check-id">UC-004</td>
         <td>
           <div class="hc-title-cell">Delta table health sample</div>
           <div class="hc-detail">Skipped: no SQL warehouse was supplied to run DESCRIBE DETAIL against a sample of tables.</div>
@@ -488,7 +488,7 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#0ca30c26; color:var(--text-1);"><span style="color:#0ca30c;">✓</span> PASS</span><br/></td>
-        <td class="hc-check-id">DG-001</td>
+        <td class="hc-check-id">UC-001</td>
         <td>
           <div class="hc-title-cell">Catalog inventory</div>
           <div class="hc-detail">2 catalog(s) visible: prod_gold, prod_silver</div>
@@ -498,14 +498,14 @@
     
       <tr>
         <td><span class="hc-status-chip" style="background:#0ca30c26; color:var(--text-1);"><span style="color:#0ca30c;">✓</span> PASS</span><br/></td>
-        <td class="hc-check-id">DG-003</td>
+        <td class="hc-check-id">UC-003</td>
         <td>
           <div class="hc-title-cell">External locations &amp; storage credentials</div>
           <div class="hc-detail">2 external location(s), 3 storage credential(s) registered.</div>
           
         </td>
       </tr>
-    </tbody></table></details><div class="hc-section-title">Jobs, Workflows &amp; DevOps</div>
+    </tbody></table></details><div class="hc-section-title">Jobs &amp; CI/CD</div>
       <table class="hc-findings">
         <thead><tr><th style="width:110px">Status</th><th style="width:80px">Check</th><th>Finding</th></tr></thead>
         <tbody>
@@ -536,7 +536,7 @@
         <td>
           <div class="hc-title-cell">CI/CD deployment (git_source)</div>
           <div class="hc-detail">2/3 job(s) are defined against workspace-local notebook paths rather than a git_source: adhoc_report_refresh, legacy_notebook_job</div>
-          <div class="hc-reco"><b>Recommendation:</b> Deploy production jobs from the Azure DevOps repo via a Databricks Asset Bundle (or job git_source pointing at a tagged commit) so job definitions are versioned, reviewed via PR, and reproducible from source control.</div>
+          <div class="hc-reco"><b>Recommendation:</b> Deploy production jobs from your Azure DevOps or GitHub repo via a Databricks Asset Bundle (or job git_source pointing at a tagged commit/release) so job definitions are versioned, reviewed via PR, and reproducible from source control.</div>
         </td>
       </tr>
     

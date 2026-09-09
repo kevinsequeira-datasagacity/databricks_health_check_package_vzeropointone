@@ -1,9 +1,15 @@
-# Azure DevOps CI pipeline for the databricks-health-check package.
+# Azure DevOps CI pipeline for the databricks-health-check-sdk package.
 #
 # This does NOT deploy or run the health check itself (that happens inside
 # each Databricks workspace via Databricks Repos -- see docs/deployment_guide.md).
 # It only lints and unit-tests the package on every PR / push, so a broken
-# check module is caught before it's synced into DEV/TEST/PRE-PROD/PROD.
+# check module is caught before it's synced into a workspace.
+#
+# Note: the unit tests exercise the check modules' *logic* against a mock
+# WorkspaceClient (tests/mock_workspace_client.py) rather than a live
+# workspace or the real SDK network calls -- see the README's "Testing"
+# section for why, and smoke-test against a real workspace before trusting
+# a new SDK version end-to-end.
 
 trigger:
   branches:
