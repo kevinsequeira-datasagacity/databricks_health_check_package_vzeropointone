@@ -1,0 +1,51 @@
+# Azure DevOps CI pipeline for the databricks-health-check package.
+#
+# This does NOT deploy or run the health check itself (that happens inside
+# each Databricks workspace via Databricks Repos -- see docs/deployment_guide.md).
+# It only lints and unit-tests the package on every PR / push, so a broken
+# check module is caught before it's synced into DEV/TEST/PRE-PROD/PROD.
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: "ubuntu-latest"
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.10"
+    displayName: "Use Python 3.10 (matches current Databricks LTS runtimes)"
+
+  - script: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+    displayName: "Install dependencies"
+
+  - script: |
+      flake8 src tests --max-line-length=140
+    displayName: "Lint (flake8)"
+
+  - script: |
+      black --check src tests
+    displayName: "Format check (black)"
+
+  - script: |
+      pytest tests -v --junitxml=$(Build.ArtifactStagingDirectory)/test-results.xml
+    displayName: "Unit tests (pytest)"
+
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: "JUnit"
+      testResultsFiles: "$(Build.ArtifactStagingDirectory)/test-results.xml"
+      failTaskOnFailedTests: true
+    displayName: "Publish test results"
